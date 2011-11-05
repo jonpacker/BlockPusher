@@ -3,11 +3,18 @@
 //  BlockPusher
 //
 //  Created by Jon Packer on 5/11/11.
-//  Copyright (c) 2011 Creative Intersection. All rights reserved.
+//  Copyright (c) 2011  Jon Packer. All rights reserved.
 //
 
 #import <UIKit/UIKit.h>
 
-@interface BPViewController : UIViewController
+@interface BPViewController : UIViewController {
+ @private
+  NSMutableArray* _contiguousViews;
+  CGFloat _nextCollisionPoint;
+  CGFloat _contiguousSetSize;
+  CGFloat _previousHorizontalTranslation;
+  BOOL _isCurrentlyPanning;
+}
 
 @end
