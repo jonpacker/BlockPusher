@@ -81,8 +81,9 @@ static const CGFloat draggableViewPadding = 2;
 
 // Sets ivar _contiguousViews to the current contiguous views inclusively to the right of the draggable containing
 // the point. If no draggable contains the point, this returns false. Also calculates _nextCollisionPoint.
-- (BOOL) findContiguousViewsFromPoint:(CGPoint)point {
+- (BOOL) findContiguousViewsFromPoint:(CGPoint)point movingRight:(BOOL)right {
   UIView* baseView = [self findDraggableContainingPoint:point];
+  _targetView = baseView;
   
   if (!baseView) return NO;
   
@@ -91,27 +92,49 @@ static const CGFloat draggableViewPadding = 2;
   UIView* contiguousView = baseView;
   CGPoint contiguousPoint;
   do {
-    [_contiguousViews addObject:contiguousView];
     contiguousPoint = contiguousView.frame.origin;
-    contiguousPoint.x += draggableViewWidth + draggableViewPadding;
+    if (right) {
+      [_contiguousViews addObject:contiguousView];
+      contiguousPoint.x += draggableViewWidth + draggableViewPadding;
+    } else {
+      [_contiguousViews insertObject:contiguousView atIndex:0];
+      contiguousPoint.x -= draggableViewWidth + draggableViewPadding;
+    }
   } while ((contiguousView = [self findDraggableContainingPoint:contiguousPoint]));
   
-  // our rightmost contiguous view will be last in the array, so we find the subview that is closest the right of it.
+  NSLog(@"%@", _contiguousViews);
+  
+  baseView = [_contiguousViews objectAtIndex:0];
+  
+  // our rightmost contiguous view will be last in the array, so we find the subview that is closest to it.
   NSArray* subviews = self.view.subviews;
-  UIView* closestRightView = nil;
-  UIView* rightmostCongiguousView = [_contiguousViews lastObject];
-  CGFloat qualifyingX = rightmostCongiguousView.frame.origin.x + rightmostCongiguousView.frame.size.width 
-                      + draggableViewPadding;
+  UIView* closestView = nil;
+  UIView* edgeCongiguousView = right ? [_contiguousViews lastObject] : [_contiguousViews objectAtIndex:0];
+  CGFloat qualifyingX = right 
+                          ? edgeCongiguousView.frame.origin.x + edgeCongiguousView.frame.size.width 
+                            + draggableViewPadding
+                          : edgeCongiguousView.frame.origin.x - draggableViewPadding;
   for (UIView* view in subviews) {
-    if (view.frame.origin.x < qualifyingX) continue;
+    if ((right && view.frame.origin.x < qualifyingX) || (!right && view.frame.origin.x > qualifyingX)) continue;
     
-    if (!closestRightView || view.frame.origin.x < closestRightView.frame.origin.x) {
-      closestRightView = view;
+    if (!closestView || 
+        (right && view.frame.origin.x < closestView.frame.origin.x) ||
+        (!right && view.frame.origin.x > closestView.frame.origin.x)) {
+      closestView = view;
     }
   }
   
-  _nextCollisionPoint = closestRightView ? closestRightView.frame.origin.x - draggableViewPadding : -1;
-  _contiguousSetSize = qualifyingX - baseView.frame.origin.x;
+  if (closestView && right) _nextCollisionPoint = closestView.frame.origin.x - draggableViewPadding;
+  else if (closestView) _nextCollisionPoint = closestView.frame.origin.x + closestView.frame.size.width 
+                                            + draggableViewPadding;
+  else _nextCollisionPoint = -1;
+  
+  if (right) {
+    _contiguousSetSize = qualifyingX - baseView.frame.origin.x;  
+  } else {
+    UIView* lastView = [_contiguousViews lastObject];
+    _contiguousSetSize = lastView.frame.origin.x + lastView.frame.size.width - qualifyingX;
+  }
   
   [self redistributeContiguousBlock];
   
@@ -122,7 +145,8 @@ static const CGFloat draggableViewPadding = 2;
   CGPoint point = [panGestureRecognizer locationInView:self.view];
   
   if (panGestureRecognizer.state == UIGestureRecognizerStateBegan) {
-    _isCurrentlyPanning = [self findContiguousViewsFromPoint:point];
+    _isCurrentlyPanning = [self findContiguousViewsFromPoint:point movingRight:YES];
+    _currentlyPanningRight = YES;
     _previousHorizontalTranslation = 0;
   } else if (panGestureRecognizer.state == UIGestureRecognizerStateEnded) {
     _isCurrentlyPanning = NO;
@@ -131,20 +155,36 @@ static const CGFloat draggableViewPadding = 2;
   } else if (panGestureRecognizer.state == UIGestureRecognizerStateChanged && _isCurrentlyPanning) {
     CGFloat horizontalTranslation = [panGestureRecognizer translationInView:self.view].x;
     CGFloat effectiveTranslation = horizontalTranslation - _previousHorizontalTranslation;
+    UIView* baseView = [_contiguousViews objectAtIndex:0];
     
-    for (UIView* view in _contiguousViews) {
-      CGRect newFrame = view.frame;
-      newFrame.origin.x += effectiveTranslation;
-      view.frame = newFrame;
+    if ((_currentlyPanningRight  && horizontalTranslation < _previousHorizontalTranslation) ||
+        (!_currentlyPanningRight && horizontalTranslation > _previousHorizontalTranslation)) {
+      _currentlyPanningRight = !_currentlyPanningRight;
+      [self findContiguousViewsFromPoint:_targetView.frame.origin movingRight:_currentlyPanningRight];
     }
     
     if (_nextCollisionPoint > 0) {
-      UIView* baseView = [_contiguousViews objectAtIndex:0];
-      if (baseView.frame.origin.x + _contiguousSetSize >= _nextCollisionPoint) {
-        [self findContiguousViewsFromPoint:baseView.frame.origin];
+      BOOL hasCollided = _currentlyPanningRight
+      ? baseView.frame.origin.x + _contiguousSetSize + effectiveTranslation >= _nextCollisionPoint
+      : baseView.frame.origin.x - draggableViewPadding + effectiveTranslation <= _nextCollisionPoint;
+      
+      if (hasCollided) {
+        [self findContiguousViewsFromPoint:_targetView.frame.origin movingRight:_currentlyPanningRight];
       }
     }
     
+    CGFloat rightBound = self.view.frame.size.width - draggableViewPadding;
+    CGFloat leftBound = draggableViewPadding;
+    
+    if ((_currentlyPanningRight && baseView.frame.origin.x + _contiguousSetSize + effectiveTranslation < rightBound) ||
+        (!_currentlyPanningRight && baseView.frame.origin.x + effectiveTranslation > leftBound)) {
+      for (UIView* view in _contiguousViews) {
+        CGRect newFrame = view.frame;
+        newFrame.origin.x += effectiveTranslation;
+        view.frame = newFrame;
+      }
+    }
+      
     _previousHorizontalTranslation = horizontalTranslation;
   }
 }

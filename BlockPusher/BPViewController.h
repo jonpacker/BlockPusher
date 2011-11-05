@@ -11,10 +11,12 @@
 @interface BPViewController : UIViewController {
  @private
   NSMutableArray* _contiguousViews;
+  UIView* _targetView;
   CGFloat _nextCollisionPoint;
   CGFloat _contiguousSetSize;
   CGFloat _previousHorizontalTranslation;
   BOOL _isCurrentlyPanning;
+  BOOL _currentlyPanningRight;
 }
 
 @end
