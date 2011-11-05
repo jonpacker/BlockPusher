@@ -50,6 +50,19 @@ static const CGFloat draggableViewPadding = 2;
   [panGestureRecognizer release];
 }
 
+- (void) redistributeContiguousBlock {
+  NSEnumerator* enumerator = [_contiguousViews objectEnumerator];
+  UIView* previousView = [enumerator nextObject];
+  UIView* currentView = nil;
+  
+  while ((currentView = [enumerator nextObject])) {
+    currentView.frame = CGRectMake(previousView.frame.origin.x + draggableViewWidth + draggableViewPadding, 
+                                   previousView.frame.origin.y, draggableViewWidth, draggableViewHeight);
+    previousView = currentView;
+  }
+}
+  
+
 // Finds the draggable view containing the given point, or returns nil if no draggable contains it.
 - (UIView *) findDraggableContainingPoint:(CGPoint)point {
   if (point.y > draggableViewYOffset + draggableViewHeight || point.y < draggableViewYOffset) return nil;
@@ -71,7 +84,7 @@ static const CGFloat draggableViewPadding = 2;
 - (BOOL) findContiguousViewsFromPoint:(CGPoint)point {
   UIView* baseView = [self findDraggableContainingPoint:point];
   
-  if (!baseView) return nil;
+  if (!baseView) return NO;
   
   // first, find all the contiguous views to the right of our base
   _contiguousViews = [[NSMutableArray alloc] init];
@@ -99,6 +112,8 @@ static const CGFloat draggableViewPadding = 2;
   
   _nextCollisionPoint = closestRightView ? closestRightView.frame.origin.x - draggableViewPadding : -1;
   _contiguousSetSize = qualifyingX - baseView.frame.origin.x;
+  
+  [self redistributeContiguousBlock];
   
   return YES;
 }
