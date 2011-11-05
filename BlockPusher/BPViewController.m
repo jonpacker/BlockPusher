@@ -102,8 +102,6 @@ static const CGFloat draggableViewPadding = 2;
     }
   } while ((contiguousView = [self findDraggableContainingPoint:contiguousPoint]));
   
-  NSLog(@"%@", _contiguousViews);
-  
   baseView = [_contiguousViews objectAtIndex:0];
   
   // our rightmost contiguous view will be last in the array, so we find the subview that is closest to it.
